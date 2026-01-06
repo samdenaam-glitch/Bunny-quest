@@ -1,0 +1,278 @@
+import React, { useState, useEffect } from 'react';
+import { RotateCcw, ChevronRight } from 'lucide-react';
+
+const EMPTY = 0;
+const WALL = 1;
+const CARROT = 2;
+const RABBIT = 3;
+const BOX = 4;
+
+const levels = [
+  {
+    grid: [
+      [1, 1, 1, 1, 1, 1],
+      [1, 3, 0, 0, 2, 1],
+      [1, 0, 1, 0, 0, 1],
+      [1, 2, 0, 1, 2, 1],
+      [1, 0, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1, 1],
+    ],
+    totalCarrots: 3
+  },
+  {
+    grid: [
+      [1, 1, 1, 1, 1, 1, 1],
+      [1, 3, 0, 4, 0, 2, 1],
+      [1, 0, 1, 1, 1, 0, 1],
+      [1, 2, 0, 0, 0, 0, 1],
+      [1, 0, 1, 4, 1, 2, 1],
+      [1, 0, 0, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1, 1, 1],
+    ],
+    totalCarrots: 3
+  },
+  {
+    grid: [
+      [1, 1, 1, 1, 1, 1, 1, 1],
+      [1, 3, 0, 0, 4, 0, 2, 1],
+      [1, 0, 1, 0, 1, 0, 0, 1],
+      [1, 0, 0, 4, 0, 1, 0, 1],
+      [1, 2, 1, 0, 0, 0, 2, 1],
+      [1, 0, 0, 0, 1, 4, 0, 1],
+      [1, 2, 0, 0, 0, 0, 0, 1],
+      [1, 1, 1, 1, 1, 1, 1, 1],
+    ],
+    totalCarrots: 4
+  }
+];
+
+export default function CarrotPuzzle() {
+  const [currentLevel, setCurrentLevel] = useState(0);
+  const [grid, setGrid] = useState([]);
+  const [rabbitPos, setRabbitPos] = useState({ x: 0, y: 0 });
+  const [carrotsCollected, setCarrotsCollected] = useState(0);
+  const [moves, setMoves] = useState(0);
+  const [levelComplete, setLevelComplete] = useState(false);
+  const [cellSize, setCellSize] = useState(40);
+  const [touchStart, setTouchStart] = useState(null);
+
+  useEffect(() => {
+    initLevel(currentLevel);
+  }, [currentLevel]);
+
+  useEffect(() => {
+    const calculateCellSize = () => {
+      const level = levels[currentLevel];
+      const gridWidth = level.grid[0].length;
+      const gridHeight = level.grid.length;
+      
+      // Reserve space for header (100px) and button (80px) and padding (40px)
+      const availableHeight = window.innerHeight - 220;
+      const availableWidth = window.innerWidth - 32;
+      
+      // Calculate size based on both dimensions
+      const widthBasedSize = Math.floor(availableWidth / gridWidth);
+      const heightBasedSize = Math.floor(availableHeight / gridHeight);
+      
+      // Use the smaller of the two to ensure it fits
+      const size = Math.min(widthBasedSize, heightBasedSize, 70);
+      setCellSize(Math.max(size, 30)); // Minimum 30px
+    };
+
+    calculateCellSize();
+    window.addEventListener('resize', calculateCellSize);
+    return () => window.removeEventListener('resize', calculateCellSize);
+  }, [currentLevel]);
+
+  const initLevel = (levelIndex) => {
+    const level = levels[levelIndex];
+    const newGrid = level.grid.map(row => [...row]);
+    
+    for (let y = 0; y < newGrid.length; y++) {
+      for (let x = 0; x < newGrid[y].length; x++) {
+        if (newGrid[y][x] === RABBIT) {
+          setRabbitPos({ x, y });
+          newGrid[y][x] = EMPTY;
+        }
+      }
+    }
+    
+    setGrid(newGrid);
+    setCarrotsCollected(0);
+    setMoves(0);
+    setLevelComplete(false);
+  };
+
+  const canMove = (newX, newY) => {
+    if (newY < 0 || newY >= grid.length || newX < 0 || newX >= grid[0].length) {
+      return false;
+    }
+    return grid[newY][newX] !== WALL;
+  };
+
+  const moveRabbit = (dx, dy) => {
+    if (levelComplete) return;
+
+    const newX = rabbitPos.x + dx;
+    const newY = rabbitPos.y + dy;
+
+    if (!canMove(newX, newY)) return;
+
+    if (grid[newY][newX] === BOX) {
+      const pushX = newX + dx;
+      const pushY = newY + dy;
+      
+      if (!canMove(pushX, pushY) || grid[pushY][pushX] === BOX) {
+        return;
+      }
+
+      const newGrid = grid.map(row => [...row]);
+      newGrid[newY][newX] = EMPTY;
+      newGrid[pushY][pushX] = BOX;
+      setGrid(newGrid);
+    }
+
+    let collected = carrotsCollected;
+    if (grid[newY][newX] === CARROT) {
+      const newGrid = grid.map(row => [...row]);
+      newGrid[newY][newX] = EMPTY;
+      setGrid(newGrid);
+      collected++;
+      setCarrotsCollected(collected);
+
+      if (collected === levels[currentLevel].totalCarrots) {
+        setLevelComplete(true);
+      }
+    }
+
+    setRabbitPos({ x: newX, y: newY });
+    setMoves(moves + 1);
+  };
+
+  const handleTouchStart = (e) => {
+    const touch = e.touches[0];
+    setTouchStart({ x: touch.clientX, y: touch.clientY });
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchStart) return;
+    
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStart.x;
+    const deltaY = touch.clientY - touchStart.y;
+    
+    const minSwipeDistance = 20;
+    
+    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (Math.abs(deltaX) > minSwipeDistance) {
+        moveRabbit(deltaX > 0 ? 1 : -1, 0);
+      }
+    } else {
+      if (Math.abs(deltaY) > minSwipeDistance) {
+        moveRabbit(0, deltaY > 0 ? 1 : -1);
+      }
+    }
+    
+    setTouchStart(null);
+  };
+
+  const getCellContent = (x, y) => {
+    const emojiSize = cellSize > 50 ? 'text-3xl' : cellSize > 40 ? 'text-2xl' : cellSize > 30 ? 'text-xl' : 'text-base';
+    const boxRatio = 0.65;
+    const boxPx = Math.floor(cellSize * boxRatio);
+    
+    if (rabbitPos.x === x && rabbitPos.y === y) {
+      return <span className={emojiSize}>🐰</span>;
+    }
+
+    switch (grid[y][x]) {
+      case WALL:
+        return <div className="w-full h-full bg-amber-800" />;
+      case CARROT:
+        return <span className={emojiSize}>🥕</span>;
+      case BOX:
+        return <div className="bg-amber-600 border-2 border-amber-800 rounded" style={{width: boxPx, height: boxPx}} />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-gradient-to-b from-green-100 to-green-200">
+      {/* Header - Fixed height */}
+      <div className="flex-none px-4 pt-3 pb-2">
+        <h1 className="text-2xl font-bold text-center mb-2 text-green-800">🐰 Bunny Quest</h1>
+        
+        <div className="bg-white rounded-lg shadow-lg px-3 py-2 mx-auto max-w-md">
+          <div className="flex justify-between items-center text-sm">
+            <div className="font-semibold text-green-700">Lv {currentLevel + 1}</div>
+            <div className="text-orange-600 font-semibold">🥕 {carrotsCollected}/{levels[currentLevel].totalCarrots}</div>
+            <div className="text-gray-600">Moves: {moves}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Game Board - Flexible, centered */}
+      <div className="flex-1 flex items-center justify-center px-4 min-h-0">
+        <div className="flex flex-col items-center">
+          <div 
+            className="inline-block border-4 border-amber-900 rounded-lg overflow-hidden bg-green-50 shadow-xl touch-none select-none"
+            style={{ 
+              width: grid[0]?.length * cellSize,
+              height: grid.length * cellSize 
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            {grid.map((row, y) => (
+              <div key={y} className="flex">
+                {row.map((cell, x) => (
+                  <div
+                    key={`${x}-${y}`}
+                    className="flex items-center justify-center border border-green-200"
+                    style={{ width: cellSize, height: cellSize }}
+                  >
+                    {getCellContent(x, y)}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          
+          <div className="text-center text-xs text-gray-700 bg-white px-3 py-1 rounded-full shadow mt-3">
+            👆 Swipe to move
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom section - Fixed height */}
+      <div className="flex-none px-4 pb-4">
+        {levelComplete && (
+          <div className="mb-3 p-3 bg-green-100 border-2 border-green-500 rounded-lg text-center shadow-lg">
+            <p className="text-xl font-bold text-green-700">🎉 Complete!</p>
+            <p className="text-green-600 text-sm mb-2">{moves} moves</p>
+            {currentLevel === levels.length - 1 ? (
+              <p className="text-green-800 font-semibold text-sm">All levels complete! 🏆</p>
+            ) : (
+              <button
+                onClick={() => setCurrentLevel(currentLevel + 1)}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg font-semibold shadow-lg active:scale-95 transition"
+              >
+                Next Level
+                <ChevronRight size={20} />
+              </button>
+            )}
+          </div>
+        )}
+        
+        <button
+          onClick={() => initLevel(currentLevel)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-lg font-semibold shadow-lg active:scale-95 transition"
+        >
+          <RotateCcw size={18} />
+          Restart
+        </button>
+      </div>
+    </div>
+  );
+}
